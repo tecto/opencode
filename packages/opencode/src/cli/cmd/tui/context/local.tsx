@@ -311,8 +311,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 "recent",
                 uniq.map((x) => ({ providerID: x.providerID, modelID: x.modelID })),
               )
-              save()
             }
+            save()
           })
         },
         toggleFavorite(model: { providerID: string; modelID: string }) {
