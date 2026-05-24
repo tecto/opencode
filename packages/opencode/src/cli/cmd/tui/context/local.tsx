@@ -141,6 +141,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
         state.pending = false
         void Filesystem.writeJson(filePath, {
+          model: modelStore.model,
           recent: modelStore.recent,
           favorite: modelStore.favorite,
           variant: modelStore.variant,
@@ -149,6 +150,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       Filesystem.readJson(filePath)
         .then((x: any) => {
+          if (typeof x.model === "object" && x.model !== null) setModelStore("model", x.model)
           if (Array.isArray(x.recent)) setModelStore("recent", x.recent)
           if (Array.isArray(x.favorite)) setModelStore("favorite", x.favorite)
           if (typeof x.variant === "object" && x.variant !== null) setModelStore("variant", x.variant)
@@ -252,6 +254,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const a = agent.current()
           if (!a) return
           setModelStore("model", a.name, { ...val })
+          save()
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
