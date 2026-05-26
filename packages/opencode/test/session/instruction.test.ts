@@ -344,6 +344,23 @@ describe("Instruction.computeHomePrefixes (BP-002)", () => {
     const fake = "/nonexistent/home/" + Math.random().toString(36).slice(2)
     expect(computeHomePrefixes(fake)).toEqual([fake + path.sep])
   })
+
+  test("returns both raw and realpath prefixes when $HOME is symlinked", () => {
+    const nodeOs = require("os")
+    const nodeFs = require("fs")
+    const tmp = nodeOs.tmpdir()
+    const real = nodeFs.realpathSync.native(tmp)
+    const prefixes = computeHomePrefixes(tmp)
+    expect(prefixes).toContain(tmp + path.sep)
+    if (tmp !== real) {
+      // macOS: /var → /private/var. The dedup Set must surface both prefixes.
+      expect(prefixes).toContain(real + path.sep)
+      expect(prefixes.length).toBe(2)
+    } else {
+      // Linux CI without symlinked tmp.
+      expect(prefixes.length).toBe(1)
+    }
+  })
 })
 
 describe("Instruction.systemPaths global config", () => {
