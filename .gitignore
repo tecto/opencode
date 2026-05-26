@@ -30,3 +30,20 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# CruxDev security — NEVER commit these
+**/tasks/*.output
+**/-Users-*
+*.key
+*.pem
+*_deploy
+.env
+.env.local
+.env.production
+.env.*.local
+.crux/
+.cruxdev/
+*.jsonl
+# BP236 12.1: MCP HTTP bearer token lives in .mcp.json — never commit
+.mcp.json
+mcp-token
