@@ -35,6 +35,64 @@ function extract(messages: MessageV2.WithParts[]) {
   return paths
 }
 
+export interface LabelContext {
+  readonly worktree: string | undefined
+  readonly homePrefixes: readonly string[]
+  readonly resolvedGlobalFiles: readonly string[]
+}
+
+// Scope-aware label for instruction provenance. Replaces the long
+// `Instructions from: <abs path>` prefix with a short scope tag:
+//   - URL (http/https) → `# <url>`
+//   - Matches a global config file → `# ~/<rel-from-home>`
+//   - worktree is "/" or empty (non-git/global project) → `# ~/<rel-from-home>` if inside $HOME, else absolute
+//   - Inside the worktree → `# <rel-from-worktree> (project)` (disambiguates monorepo per-package vs root AGENTS.md)
+//   - Else (worktree set but item outside it — e.g. `config.instructions: /opt/team-rules.md`) → tildeify only,
+//     no "(project)" tag, so the label isn't misleading.
+export function labelFor(item: string, ctx: LabelContext): string {
+  if (item.startsWith("https://") || item.startsWith("http://")) return `# ${item}`
+  const real = path.resolve(item)
+  const tildeify = (p: string) => {
+    for (const prefix of ctx.homePrefixes) {
+      if (p.startsWith(prefix)) return "~/" + p.slice(prefix.length)
+    }
+    return p
+  }
+  if (ctx.resolvedGlobalFiles.includes(real)) return `# ${tildeify(real)}`
+  const { worktree } = ctx
+  if (!worktree || worktree === "" || worktree === "/") {
+    return `# ${tildeify(real)}`
+  }
+  const worktreeSep = worktree + path.sep
+  if (real === worktree || real.startsWith(worktreeSep)) {
+    const rel = path.relative(worktree, real)
+    return `# ${rel || path.basename(real)} (project)`
+  }
+  // Path is outside the worktree — `(project)` would mislead.
+  return `# ${tildeify(real)}`
+}
+
+// Best-effort realpath of $HOME: handles macOS where /var is symlinked to /private/var,
+// or any custom $HOME that resolves to a different real path. Falls back to home if
+// realpath fails (e.g. home doesn't exist on disk in test fixtures). Empty/root homes
+// are filtered first to avoid over-tildeifying every absolute path (realpath of "" is
+// cwd on most platforms, which would tildeify anything under the process cwd).
+export function computeHomePrefixes(home: string): string[] {
+  if (!home || home.length <= 1) return []
+  const homeReal = (() => {
+    try {
+      return realpathSync.native(home)
+    } catch {
+      return home
+    }
+  })()
+  return Array.from(
+    new Set(
+      [home, homeReal].filter((h) => h && h.length > 1).map((h) => h + path.sep),
+    ),
+  )
+}
+
 export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
   readonly systemPaths: () => Effect.Effect<Set<string>, AppFileSystem.Error>
@@ -67,47 +125,8 @@ export const layer: Layer.Layer<
     ]
     const resolvedGlobalFiles = globalFiles.map((f) => path.resolve(f))
     const instructionFiles = files(flags.disableClaudeCodePrompt)
-    // Best-effort realpath of $HOME: handles macOS where /var is symlinked to /private/var,
-    // or any custom $HOME that resolves to a different real path. Falls back to global.home
-    // if realpath fails (e.g. home doesn't exist on disk in test fixtures).
-    const homeReal = (() => {
-      try {
-        return realpathSync.native(global.home)
-      } catch {
-        return global.home
-      }
-    })()
-    const homePrefixes = Array.from(new Set([global.home + path.sep, homeReal + path.sep]))
-
-    // Scope-aware label for instruction provenance. Replaces the long
-    // `Instructions from: <abs path>` prefix with a short scope tag:
-    //   - URL (http/https) → `# <url>`
-    //   - Matches a global config file → `# ~/<rel-from-home>`
-    //   - worktree is "/" or empty (non-git/global project) → `# ~/<rel-from-home>` if inside $HOME, else absolute
-    //   - Inside the worktree → `# <rel-from-worktree> (project)` (disambiguates monorepo per-package vs root AGENTS.md)
-    //   - Else (worktree set but item outside it — e.g. `config.instructions: /opt/team-rules.md`) → tildeify only,
-    //     no "(project)" tag, so the label isn't misleading.
-    function labelFor(item: string, worktree: string | undefined): string {
-      if (item.startsWith("https://") || item.startsWith("http://")) return `# ${item}`
-      const real = path.resolve(item)
-      const tildeify = (p: string) => {
-        for (const prefix of homePrefixes) {
-          if (p.startsWith(prefix)) return "~/" + p.slice(prefix.length)
-        }
-        return p
-      }
-      if (resolvedGlobalFiles.includes(real)) return `# ${tildeify(real)}`
-      if (!worktree || worktree === "" || worktree === "/") {
-        return `# ${tildeify(real)}`
-      }
-      const worktreeSep = worktree + path.sep
-      if (real === worktree || real.startsWith(worktreeSep)) {
-        const rel = path.relative(worktree, real)
-        return `# ${rel || path.basename(real)} (project)`
-      }
-      // Path is outside the worktree — `(project)` would mislead.
-      return `# ${tildeify(real)}`
-    }
+    const homePrefixes = computeHomePrefixes(global.home)
+    const labelCtx = (worktree: string | undefined): LabelContext => ({ worktree, homePrefixes, resolvedGlobalFiles })
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -205,9 +224,10 @@ export const layer: Layer.Layer<
       const files = yield* Effect.forEach(Array.from(paths), read, { concurrency: 8 })
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
+      const lc = labelCtx(ctx.worktree)
       return [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`${labelFor(item, ctx.worktree)}\n${files[i]}`] : [])),
-        ...urls.flatMap((item, i) => (remote[i] ? [`${labelFor(item, ctx.worktree)}\n${remote[i]}`] : [])),
+        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`${labelFor(item, lc)}\n${files[i]}`] : [])),
+        ...urls.flatMap((item, i) => (remote[i] ? [`${labelFor(item, lc)}\n${remote[i]}`] : [])),
       ]
     })
 
@@ -255,7 +275,7 @@ export const layer: Layer.Layer<
         set.add(found)
         const content = yield* read(found)
         if (content) {
-          results.push({ filepath: found, content: `${labelFor(found, ctx.worktree)}\n${content}` })
+          results.push({ filepath: found, content: `${labelFor(found, labelCtx(ctx.worktree))}\n${content}` })
         }
 
         current = path.dirname(current)

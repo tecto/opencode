@@ -6,7 +6,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { ModelID, ProviderID } from "../../src/provider/schema"
-import { Instruction } from "../../src/session/instruction"
+import { Instruction, computeHomePrefixes, labelFor } from "../../src/session/instruction"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@opencode-ai/core/global"
@@ -229,35 +229,6 @@ describe("Instruction.system", () => {
     }),
   )
 
-  it.live("emits `# <url>` label for remote instructions (BP-002 URL branch)", () =>
-    Effect.gen(function* () {
-      const globalTmp = yield* tmpdirScoped()
-      const projectTmp = yield* tmpdirScoped()
-      const url = "https://example.test/rules.md"
-
-      yield* Effect.gen(function* () {
-        const svc = yield* Instruction.Service
-        const rules = yield* svc.system()
-        // URL fetch will fail in the test environment (no network); system() drops empty
-        // bodies. To assert on the URL branch we verify systemPaths excludes URLs and that
-        // labelFor is invoked through the URL path — we can verify via a successful label
-        // by mocking fetch is overkill; instead just assert no project files were loaded
-        // since the test dirs are empty, and verify the URL passthrough by direct
-        // construction. The intent here is regression coverage for `# url` not being
-        // mistakenly tagged `(project)`.
-        const paths = yield* svc.systemPaths()
-        expect(paths.has(url)).toBe(false)
-        // Rules list is empty because URL fetch returns empty and project dirs are empty.
-        expect(rules).toEqual([])
-      }).pipe(
-        provideInstance(projectTmp),
-        provideInstruction({ home: globalTmp, config: globalTmp }, undefined, {
-          get: () => Effect.succeed({ instructions: [url] }),
-        }),
-      )
-    }),
-  )
-
   it.live("labels config.instructions outside the worktree without `(project)` (BP-002 F-002 regression)", () =>
     Effect.gen(function* () {
       const globalTmp = yield* tmpdirScoped()
@@ -267,11 +238,11 @@ describe("Instruction.system", () => {
       yield* provideTmpdirInstance(
         (root) =>
           Effect.gen(function* () {
+            // Fixture invariant: externalDir and root must be non-nested siblings under
+            // os.tmpdir(). Fail loudly if a future fixture change breaks that.
+            expect(externalFile.startsWith(root + path.sep)).toBe(false)
             const svc = yield* Instruction.Service
             const rules = yield* svc.system()
-            // The external file is outside the worktree (root). The label MUST NOT be
-            // tagged `(project)` — F-002 fix. Since the file is also outside the fake
-            // $HOME (globalTmp), tildeify is a no-op and the absolute path appears.
             const externalRule = rules.find((r) => r.includes("# Team Rules"))
             expect(externalRule).toBeDefined()
             expect(externalRule!).toBe(`# ${externalFile}\n# Team Rules`)
@@ -303,6 +274,76 @@ describe("Instruction.system", () => {
       )
     }),
   )
+})
+
+describe("Instruction.labelFor (BP-002)", () => {
+  const home = "/fake/home/user"
+  const worktree = "/fake/projects/myrepo"
+  const globalAgents = "/fake/home/user/.config/opencode/AGENTS.md"
+  const ctx = {
+    worktree,
+    homePrefixes: [home + path.sep],
+    resolvedGlobalFiles: [globalAgents],
+  }
+
+  test("URL passes through unchanged with no `(project)` tag", () => {
+    expect(labelFor("https://example.com/rules.md", ctx)).toBe("# https://example.com/rules.md")
+    expect(labelFor("http://example.com/rules.md", ctx)).toBe("# http://example.com/rules.md")
+    expect(labelFor("https://example.com/rules.md", ctx).includes("(project)")).toBe(false)
+  })
+
+  test("global config file tildeifies relative to $HOME", () => {
+    expect(labelFor(globalAgents, ctx)).toBe("# ~/.config/opencode/AGENTS.md")
+  })
+
+  test("inside-worktree file gets `(project)` suffix with worktree-relative path", () => {
+    const item = "/fake/projects/myrepo/packages/x/AGENTS.md"
+    expect(labelFor(item, ctx)).toBe("# packages/x/AGENTS.md (project)")
+    expect(labelFor("/fake/projects/myrepo/AGENTS.md", ctx)).toBe("# AGENTS.md (project)")
+  })
+
+  test("outside-worktree path is tildeified or kept absolute, never tagged `(project)` (F-002)", () => {
+    expect(labelFor("/opt/team-rules.md", ctx)).toBe("# /opt/team-rules.md")
+    expect(labelFor("/opt/team-rules.md", ctx).includes("(project)")).toBe(false)
+    expect(labelFor("/fake/home/user/dotfiles/AGENTS.md", ctx)).toBe("# ~/dotfiles/AGENTS.md")
+  })
+
+  test("worktree === '/' or empty falls back to tildeify-or-absolute", () => {
+    const rootCtx = { ...ctx, worktree: "/" }
+    expect(labelFor("/fake/home/user/notes.md", rootCtx)).toBe("# ~/notes.md")
+    expect(labelFor("/var/log/foo.md", rootCtx)).toBe("# /var/log/foo.md")
+    const emptyCtx = { ...ctx, worktree: "" }
+    expect(labelFor("/fake/home/user/notes.md", emptyCtx)).toBe("# ~/notes.md")
+    const undefinedCtx = { ...ctx, worktree: undefined }
+    expect(labelFor("/var/log/foo.md", undefinedCtx)).toBe("# /var/log/foo.md")
+  })
+
+  test("prefix containment uses path.sep so `/Users/use` does not match `/Users/user/...`", () => {
+    const tightCtx = { worktree: "/Users/use", homePrefixes: [], resolvedGlobalFiles: [] }
+    expect(labelFor("/Users/user/file.md", tightCtx)).toBe("# /Users/user/file.md")
+  })
+
+  test("worktree-root file falls back to basename when path.relative yields empty", () => {
+    expect(labelFor(worktree, ctx)).toBe("# myrepo (project)")
+  })
+})
+
+describe("Instruction.computeHomePrefixes (BP-002)", () => {
+  test("returns home + sep for an existing home directory", () => {
+    const prefixes = computeHomePrefixes(process.env.HOME ?? "/tmp")
+    expect(prefixes.length).toBeGreaterThanOrEqual(1)
+    expect(prefixes.every((p) => p.endsWith(path.sep))).toBe(true)
+  })
+
+  test("filters empty and single-char homes to avoid over-tildeifying", () => {
+    expect(computeHomePrefixes("")).toEqual([])
+    expect(computeHomePrefixes("/")).toEqual([])
+  })
+
+  test("falls back to raw home when realpath fails (non-existent path)", () => {
+    const fake = "/nonexistent/home/" + Math.random().toString(36).slice(2)
+    expect(computeHomePrefixes(fake)).toEqual([fake + path.sep])
+  })
 })
 
 describe("Instruction.systemPaths global config", () => {
