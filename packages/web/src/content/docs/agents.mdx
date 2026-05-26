@@ -139,6 +139,14 @@ Hidden system agent that creates session summaries. It runs automatically and is
 
 ---
 
+## Model selection per agent
+
+Each agent can run on a different model. When you change the model for an agent inside the TUI (via `/models`, `ctrl+x m`, or model cycling), opencode persists the choice to `agent.<name>.model` in your project's `opencode.json[c]` so teammates cloning the repo get the same default. Only agents you explicitly change during the TUI session are written — your accumulated picks from other projects don't leak into a shared config. (Variant cycling itself does *not* write to project config — variants are keyed by `provider/model`, not by agent, and stay user-local.)
+
+If the project write fails (read-only target, etc.), the sidebar shows a `project config: write failing` indicator and a toast surfaces the underlying error; opencode retries on your next model change. To opt out entirely and keep model selections user-local, set `OPENCODE_DISABLE_PROJECT_CONFIG=1`. See [Per project](/docs/config#per-project) in the config docs for the precedence ladder and scaffold behavior.
+
+---
+
 ## Configure
 
 You can customize the built-in agents or create your own through configuration. Agents can be configured in two ways:

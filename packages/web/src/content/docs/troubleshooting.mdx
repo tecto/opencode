@@ -219,6 +219,7 @@ Here are some common issues and how to resolve them.
 
 If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
 referencing a model somewhere.
+
 Models should be referenced like so: `<providerId>/<modelId>`
 
 Examples:
@@ -228,6 +229,21 @@ Examples:
 - `opencode/kimi-k2`
 
 To figure out what models you have access to, run `opencode models`
+
+---
+
+### Sidebar shows "project config: write failing"
+
+When you change a model in the TUI, opencode writes `agent.<name>.model` to your project's `opencode.json[c]`. If that write fails, the sidebar shows a `project config: write failing` indicator and a toast surfaces the underlying error. opencode keeps your in-memory model choice and retries on the next change.
+
+Common causes:
+
+1. The target file or `.opencode/` directory is read-only (check permissions: `ls -ld .opencode opencode.json*`)
+2. You're inside a sandboxed or network-mounted filesystem that rejects atomic rename (NFS, fuse, /tmp on some platforms)
+3. `OPENCODE_CONFIG` / `OPENCODE_CONFIG_DIR` points to a stale path that no longer exists or has changed permissions mid-session — a TUI restart re-resolves the target
+4. The path-safety check refused the resolved target (`/proc/...`, `/sys/...`, or a location outside both the worktree and `$HOME`). Look for the startup warning toast naming the rejected path.
+
+To disable project-config writes entirely and keep model state user-only, set `OPENCODE_DISABLE_PROJECT_CONFIG=1`. See [Per project](/docs/config#per-project) for the full precedence ladder.
 
 ---
 

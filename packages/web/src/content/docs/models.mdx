@@ -23,6 +23,8 @@ Once you've configured your provider you can select the model you want by typing
 /models
 ```
 
+Your selection is saved as `agent.<active>.model` in your project's `opencode.json[c]` (scaffolds `.opencode/opencode.json` at the git worktree root — or the current directory if you're not in a git repo — on first change in a fresh project), so teammates cloning the repo pick up the same default. The `recent` / `favorite` / `variant` lists remain user-local. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to keep all model state user-only. See the [Per project section in Config](/docs/config#per-project) for full semantics.
+
 ---
 
 ## Recommended models

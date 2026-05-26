@@ -120,6 +120,16 @@ When OpenCode starts up, it looks for a config file in the current directory or 
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
+#### TUI model selections persist here
+
+When you change the model for an agent inside the TUI (via `/models`, `ctrl+x m`, or cycling), the new value is written to `agent.<name>.model` in your project's `opencode.json[c]`. Comments in `.jsonc` files are preserved. Only agents you explicitly change during the session are written — your prior per-agent picks from other projects do not leak into a teammate's repo.
+
+If no project config exists yet, opencode scaffolds `.opencode/opencode.json` at your git worktree root (or the current directory if you're not in a git repo) on first model change and toasts the created path.
+
+To opt out and keep model selections in user state only, set `OPENCODE_DISABLE_PROJECT_CONFIG=1`.
+
+A path-safety check refuses to scaffold under `/` (or near-root), `/proc`, `/dev`, `/sys`, or any path that is **outside both the git worktree and `$HOME`** — unless an env override (`OPENCODE_CONFIG` / `OPENCODE_CONFIG_DIR`) explicitly points there. Worktrees that happen to live outside `$HOME` (e.g. `/srv/...`, `/opt/...`) work fine; only paths outside *both* boundaries are rejected.
+
 ---
 
 ### Custom path

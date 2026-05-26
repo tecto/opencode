@@ -221,6 +221,16 @@ For advanced cases, use an object with `key`, `event`, `preventDefault`, or `fal
 
 ---
 
+## Model selection keybinds and persistence
+
+`model_list` (which opens the `/models` picker), `model_cycle_recent` / `model_cycle_recent_reverse`, and `model_cycle_favorite` / `model_cycle_favorite_reverse` all change `agent.<active>.model` — those changes are persisted to your project's `opencode.json[c]` (see [Model selection per agent](/docs/agents#model-selection-per-agent)).
+
+`model_favorite_toggle` only updates your **user-local** favorites list (`~/.local/share/opencode/state/model.json`) and does NOT change the agent's model or write to project config.
+
+`variant_cycle` and `variant_list` change the variant for the *current `provider/model` pair*, not the agent's model. Variant state stays user-local and is never written to project config.
+
+---
+
 ## Disable Keybind
 
 You can disable a keybind by adding the key to `tui.json` with a value of `"none"` or `false`.
