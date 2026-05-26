@@ -13,6 +13,7 @@ import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { existsSync } from "fs"
+import { randomUUID } from "crypto"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
 import type { ConsoleState } from "./console-state"
@@ -327,6 +328,7 @@ export interface Interface {
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly updateProject: (config: Info, targetPath: string) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -851,12 +853,55 @@ export const layer = Layer.effect(
       return { info: next, changed }
     })
 
+    // Atomic write with cross-FS / Windows fallback. Unique tmp filename per write avoids
+    // concurrent-save races. Any rename failure (EXDEV/EPERM/EEXIST) falls back to
+    // copy + remove. All inner fs ops .pipe(Effect.orDie) so the helper's error channel
+    // matches the declared Interface signature.
+    const writeAtomic = Effect.fn("Config.writeAtomic")(function* (filePath: string, contents: string) {
+      const tmp = `${filePath}.${process.pid}.${randomUUID()}.tmp`
+      yield* fs.makeDirectory(path.dirname(filePath), { recursive: true }).pipe(Effect.orDie)
+      yield* fs.writeFileString(tmp, contents).pipe(Effect.orDie)
+      yield* fs.rename(tmp, filePath).pipe(
+        Effect.catch(() =>
+          fs.copyFile(tmp, filePath).pipe(
+            Effect.tap(() => fs.remove(tmp).pipe(Effect.ignore)),
+            Effect.orDie,
+          ),
+        ),
+      )
+    })
+
+    const updateProject = Effect.fn("Config.updateProject")(function* (config: Info, targetPath: string) {
+      const before = (yield* readConfigFile(targetPath)) ?? "{}"
+      const patch = writable(config)
+
+      let next: Info
+      let changed: boolean
+      if (!targetPath.endsWith(".jsonc")) {
+        const existing = ConfigParse.schema(Info, ConfigParse.jsonc(before, targetPath), targetPath)
+        const merged = mergeDeep(writable(existing), patch)
+        const serialized = JSON.stringify(merged, null, 2)
+        changed = serialized !== before
+        if (changed) yield* writeAtomic(targetPath, serialized)
+        next = merged
+      } else {
+        const updated = patchJsonc(before, patch)
+        next = ConfigParse.schema(Info, ConfigParse.jsonc(updated, targetPath), targetPath)
+        changed = updated !== before
+        if (changed) yield* writeAtomic(targetPath, updated)
+      }
+
+      if (changed) yield* invalidate()
+      return { info: next, changed }
+    })
+
     return Service.of({
       get,
       getGlobal,
       getConsoleState,
       update,
       updateGlobal,
+      updateProject,
       invalidate,
       directories,
       waitForDependencies,

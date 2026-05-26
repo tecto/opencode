@@ -1,8 +1,12 @@
 import { batch } from "solid-js"
-import type { Path, Workspace } from "@opencode-ai/sdk/v2"
+import type { ModelWriteTarget, Path, Workspace } from "@opencode-ai/sdk/v2"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
+import { useToast } from "../ui/toast"
+
+// Module-scope guard so the safety-rejection toast fires at most once per TUI process.
+let safetyToastShown = false
 
 type WorkspaceStatus = "connected" | "connecting" | "disconnected" | "error"
 
@@ -10,6 +14,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
   name: "Project",
   init: () => {
     const sdk = useSDK()
+    const toast = useToast()
 
     const defaultPath = {
       home: "",
@@ -25,6 +30,7 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
       },
       instance: {
         path: defaultPath,
+        modelWriteTarget: undefined as ModelWriteTarget | undefined,
       },
       workspace: {
         current: undefined as string | undefined,
@@ -35,15 +41,29 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
 
     async function sync() {
       const workspace = store.workspace.current
-      const [path, project] = await Promise.all([
+      const [path, project, modelWriteTarget] = await Promise.all([
         sdk.client.path.get({ workspace }),
         sdk.client.project.current({ workspace }),
+        sdk.client.config.modelWriteTarget({ workspace }).catch(() => undefined),
       ])
 
       batch(() => {
         setStore("instance", "path", reconcile(path.data || defaultPath))
         setStore("project", "id", project.data?.id)
+        setStore("instance", "modelWriteTarget", modelWriteTarget?.data)
       })
+
+      // One-shot safety-rejection toast — fires only when resolver refused a target
+      // (e.g. OPENCODE_CONFIG_DIR=/proc/foo, scaffold above $HOME).
+      const target = modelWriteTarget?.data
+      if (!safetyToastShown && target?.mode === "user" && target.refusedReason) {
+        safetyToastShown = true
+        toast.show({
+          variant: "warning",
+          message: `Project model config disabled: ${target.refusedReason}${target.refusedPath ? ` (${target.refusedPath})` : ""}`,
+          duration: 4000,
+        })
+      }
     }
 
     async function syncWorkspace() {
@@ -78,6 +98,9 @@ export const { use: useProject, provider: ProjectProvider } = createSimpleContex
         },
         directory() {
           return store.instance.path.directory
+        },
+        modelWriteTarget() {
+          return store.instance.modelWriteTarget
         },
       },
       workspace: {

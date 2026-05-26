@@ -26,7 +26,7 @@ _None._ The project has README, CONTRIBUTING, SECURITY, LICENSE, per-package AGE
 | # | Gap | Status |
 |---|---|---|
 | M1 | No root `CHANGELOG.md` | Open — opencode currently uses `UPCOMING_CHANGELOG.md` (gitignored) + release notes elsewhere; consider a tracked CHANGELOG |
-| M2 | `intake/` and `build_plans/` were empty until BP-001 (now has BP-001) | Partially resolved |
+| M2 | `intake/` and `build_plans/` were empty until BP-001 (now has `build_plans/BUILD_PLAN_001_SAVE_TUI_MODEL_SELECTION_TO_PROJECT_OPENCODE_CONFIG.md`, converged + shipped) | Partially resolved |
 | M3 | Translation glossaries (`.opencode/glossary/`) have no per-language review log | Open |
 | M4 | `.crux/` is partially populated (`context/`, `corrections/`, `index/`, `knowledge/` are empty) | Open — either backfill or document as intentional |
 
@@ -48,6 +48,6 @@ _None._ The project has README, CONTRIBUTING, SECURITY, LICENSE, per-package AGE
 - C2 — `install_cruxdev` run; project registered with project_id `caa5d9eb-1ccd-4573-bd8c-e7efc07843b9`
 - C3 — Session registered (`49f48c0c`)
 - C4 — Project classified: software-existing (primary), website + product-saas + campaign + open-source (secondary), maturity `mature`
-- C5 — `build_plans/BUILD_PLAN_001` created (TUI model → project config feature)
+- C5 — `build_plans/BUILD_PLAN_001` created, converged through 9 audit rounds, and **shipped**; TUI model persistence to project opencode config landed across `packages/opencode/src/config/{paths,config}.ts`, the server HttpApi, the TUI ProjectProvider/LocalProvider, and a new sidebar status indicator. See `packages/opencode/AGENTS.md` "TUI model persistence (BP-001)".
 - C6 — Root `CLAUDE.md` created with cruxdev usage guidance + AGENTS.md pointer
 - C7 — `docs/GAPS.md`, `docs/ARCHITECTURE.md` stub, `docs/COMPETITORS.md` stub created

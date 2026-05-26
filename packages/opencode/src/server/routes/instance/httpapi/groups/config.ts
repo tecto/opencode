@@ -1,5 +1,6 @@
 import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
+import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
@@ -7,6 +8,35 @@ import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware
 import { described } from "./metadata"
 
 const root = "/config"
+
+const ProjectAgentModel = Schema.Struct({
+  providerID: Schema.String,
+  modelID: Schema.String,
+})
+
+const ModelWriteTargetResponse = Schema.Union([
+  Schema.Struct({
+    mode: Schema.Literal("user"),
+    refusedPath: Schema.optional(Schema.String),
+    refusedReason: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    mode: Schema.Literal("project"),
+    path: Schema.String,
+    source: Schema.Literals([
+      "OPENCODE_CONFIG",
+      "OPENCODE_CONFIG_DIR",
+      "existing_file",
+      "existing_dot_opencode",
+      "scaffolded",
+    ]),
+  }),
+]).annotate({ identifier: "ModelWriteTarget" })
+
+const UpdateProjectRequest = Schema.Struct({
+  targetPath: Schema.String,
+  models: Schema.Record(Schema.String, ProjectAgentModel),
+}).annotate({ identifier: "UpdateProjectRequest" })
 
 export const ConfigApi = HttpApi.make("config")
   .add(
@@ -42,6 +72,28 @@ export const ConfigApi = HttpApi.make("config")
             identifier: "config.providers",
             summary: "List config providers",
             description: "Get a list of all configured AI providers and their default models.",
+          }),
+        ),
+        HttpApiEndpoint.get("modelWriteTarget", `${root}/model_write_target`, {
+          query: WorkspaceRoutingQuery,
+          success: described(ModelWriteTargetResponse, "Resolved project-config write target"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.modelWriteTarget",
+            summary: "Resolve model write target",
+            description: "Compute where TUI model selections should be persisted (project config, scaffold, or user-only mode).",
+          }),
+        ),
+        HttpApiEndpoint.post("updateProject", `${root}/update_project`, {
+          query: WorkspaceRoutingQuery,
+          payload: UpdateProjectRequest,
+          success: described(Schema.Boolean, "Project config updated"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "config.updateProject",
+            summary: "Update project config models",
+            description: "Persist the given per-agent model selections to the specified project config file.",
           }),
         ),
       )

@@ -1,5 +1,7 @@
 # BUILD_PLAN_001: Save TUI model selection to project opencode config
 
+**Status**: CONVERGED (2026-05-26, convergence_id `6d782d36`) — 9 audit rounds across Planning, PatternAssessment ×3, PatternOrchestration ×2, PlanAuditing ×2, DocAlignment ×2, Viability ×2. ~37 findings applied. Final round produced two consecutive independent clean Viability passes.
+
 ## Document Alignment
 
 **Reused helpers and patterns** (plan calls into these unchanged):
@@ -95,7 +97,7 @@ No schema change. No breaking change to user state file shape.
 
 ## Phase 2: Implementation
 
-- [ ] **Step 1 — `resolveModelWriteTarget()` + helpers in `packages/opencode/src/config/paths.ts`**
+- [x] **Step 1 — `resolveModelWriteTarget()` + helpers in `packages/opencode/src/config/paths.ts`**
 
   Real signature: `Effect.fn` produces `(...args) => Effect.Effect<A, E, R>`. The TS form is `const NAME = Effect.fn("...")(function* (...) { ... })`. Pseudocode follows that exact form.
 
@@ -200,7 +202,7 @@ No schema change. No breaking change to user state file shape.
   - `worktreeRaw` is forwarded to `files()` and `afs.up()` since those tolerate `"/"` as the stop bound (the walk terminates at root naturally). Only the scaffold path uses the normalized form.
   - Return type includes `{ mode: "user", refusedPath?, refusedReason? }` so the TUI can render a startup toast on safety rejection.
 
-- [ ] **Step 2 — `Config.updateProject()` in `packages/opencode/src/config/config.ts`**
+- [x] **Step 2 — `Config.updateProject()` in `packages/opencode/src/config/config.ts`**
 
   Mirrors `updateGlobal` (lines 829-852). Add to the public `Interface` (line 324-333) and to the `Service.of` factory (line 854-863).
 
@@ -261,7 +263,7 @@ No schema change. No breaking change to user state file shape.
   - Caller surface (used by the server handler): `Config.updateProject({ agent: { [name]: { model: \`${providerID}/${modelID}\` } } }, targetPath)`.
   - Batching: for N dirty agents the server handler merges all into one partial Info before a single `updateProject` call. One read, one write per save() invocation.
 
-- [ ] **Step 3 — Server endpoint group + handler additions**
+- [x] **Step 3 — Server endpoint group + handler additions**
 
   In `packages/opencode/src/server/routes/instance/httpapi/groups/config.ts`, add (alongside existing `get`/`update`/`providers` at lines `:15-46`):
 
@@ -350,13 +352,13 @@ No schema change. No breaking change to user state file shape.
 
   **Server restart required** (audit f5-R5): HttpApi groups are constructed at module-load time in `groups/config.ts`, so adding new endpoint entries requires a **hard restart** of any running `bun run dev` / `opencode serve` process — hot-reload may not re-register the new group. Forgetting this restart manifests as 404s on the new endpoints during manual verification (Phase 3); SDK regen (Step 3.5) still works because `script/build.ts` reads the schema via a fresh module load.
 
-- [ ] **Step 3.5 — Regenerate SDK client** (audit f1-R3): SDK regen is the load-bearing dependency between server-side endpoints (Step 3) and TUI consumers (Steps 4-5). Run `cd packages/sdk/js && bun run build`. This re-runs `packages/sdk/js/script/build.ts`, which dumps the OpenAPI schema and regenerates `packages/sdk/js/src/v2/gen/sdk.gen.ts`. **Before proceeding to Step 4**, verify both new entries exist:
+- [x] **Step 3.5 — Regenerate SDK client** (audit f1-R3): SDK regen is the load-bearing dependency between server-side endpoints (Step 3) and TUI consumers (Steps 4-5). Run `cd packages/sdk/js && bun run build`. This re-runs `packages/sdk/js/script/build.ts`, which dumps the OpenAPI schema and regenerates `packages/sdk/js/src/v2/gen/sdk.gen.ts`. **Before proceeding to Step 4**, verify both new entries exist:
   ```bash
   grep -E 'modelWriteTarget|updateProject' packages/sdk/js/src/v2/gen/sdk.gen.ts
   ```
   Expected: two matches each (a typed signature + a runtime export). If missing, the SDK build silently skipped them — re-check `groups/config.ts` for syntax errors and re-run.
 
-- [ ] **Step 4 — Extend `ProjectProvider` in `packages/opencode/src/cli/cmd/tui/context/project.tsx`**
+- [x] **Step 4 — Extend `ProjectProvider` in `packages/opencode/src/cli/cmd/tui/context/project.tsx`**
 
   Add `modelWriteTarget: undefined as ResolvedTarget | undefined` to the store (`instance` slice, line 22-34). In `sync()` (line 36-47), fetch it in parallel with `path` and `project.current`:
 
@@ -396,7 +398,7 @@ No schema change. No breaking change to user state file shape.
   ```
   Acquire `const toast = useToast()` at the top of the `init()` body. `ToastProvider` is mounted above `ProjectProvider` in `app.tsx:211`, so this is safe; if a future change reorders providers, this call would break — flag for code review.
 
-- [ ] **Step 5 — Rewrite `save()` in `local.tsx`**
+- [x] **Step 5 — Rewrite `save()` in `local.tsx`**
 
   Current `save()` at lines 138-154 only writes user state. Replace with the version below. Module-scope additions go alongside the existing `state` object at line 134-136.
 
@@ -492,7 +494,7 @@ No schema change. No breaking change to user state file shape.
   - On `mode: "user"` (e.g., env disable or safety-check rejection), Steps 1 (user-state write) still runs; project write is skipped.
   - **Public getter** (audit f2-R3): extend the `model` API surface returned by `LocalProvider` with `projectWriteFailing(): boolean` that returns `state.projectWriteFailing`. This is the single read path the status-bar component (Step 6) consumes.
 
-- [ ] **Step 6 — TUI status-bar indicator** (audit f2-R3, promoted from Phase 3)
+- [x] **Step 6 — TUI status-bar indicator** (audit f2-R3, promoted from Phase 3)
 
   Add a new sidebar component at `packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/project-config.tsx` modeled on `mcp.tsx` / `lsp.tsx`. It reads `useLocal().model.projectWriteFailing()` (the getter added in Step 5) and renders a colored dot + label when truthy. When `false`, it renders nothing. Cross-import of `useLocal` from a sidebar plugin matches the precedent in `feature-plugins/system/session-v2.tsx`. Theme tokens follow the same convention as the existing indicators.
 
@@ -504,7 +506,7 @@ No schema change. No breaking change to user state file shape.
   ```
   Without this registration the component is never instantiated and the indicator will silently never render.
 
-- [ ] **Step 7 — Tests at `packages/opencode/test/config/model-persistence.test.ts`**
+- [x] **Step 7 — Tests at `packages/opencode/test/config/model-persistence.test.ts`**
 
   Follow the patterns in `packages/opencode/test/config/tui.test.ts` (TestInstance fixture, `withCleanState`, `withEnv`). All tests scope env-var mutations to `withEnv` so they don't bleed between cases.
 
@@ -553,21 +555,21 @@ No schema change. No breaking change to user state file shape.
 
 ## Phase 3: Integration & Polish
 
-- [ ] **Restart any running `opencode serve` / `bun run dev` instances** before manual verification (audit f5-R5). HttpApi endpoints register at module load; hot-reload does not pick up new endpoints.
-- [ ] Manual verification — existing-file preservation: in this repo, `.opencode/opencode.jsonc` exists; change a model in TUI; confirm `agent.<active>.model` updated and surrounding comments intact
-- [ ] Manual verification — scaffold path: fresh git repo at `/tmp/fresh-repo`, run TUI, confirm scaffold at `/tmp/fresh-repo/.opencode/opencode.json` + info toast
-- [ ] Manual verification — non-git dir: `cd /tmp/no-git-dir && opencode`, change model, confirm scaffold at `/tmp/no-git-dir/.opencode/opencode.json` (NOT `/.opencode/opencode.json`)
-- [ ] Manual verification — `OPENCODE_CONFIG=/tmp/oc.jsonc` overrides project write target
-- [ ] Manual verification — `OPENCODE_CONFIG_DIR=/tmp/oc-dir` overrides project write target
-- [ ] Manual verification — `OPENCODE_DISABLE_PROJECT_CONFIG=1` skips project write entirely
-- [ ] Manual verification — `OPENCODE_CONFIG_DIR=/proc/test` triggers safety-check warning toast at startup; project write suppressed
-- [ ] Manual verification — induce project-write failure (chmod target read-only mid-session); assert persistent status indicator appears, toast on each failed save, indicator clears when permissions are restored and next save succeeds
-- [ ] `bun test packages/opencode/test/config/model-persistence.test.ts` passes (all 20 cases)
-- [ ] `bun turbo typecheck` passes
-- [ ] Append the following paragraph to `packages/opencode/AGENTS.md` (audit f6-R5):
+- [x] **Restart any running `opencode serve` / `bun run dev` instances** before manual verification (audit f5-R5). HttpApi endpoints register at module load; hot-reload does not pick up new endpoints.
+- [x] Manual verification — existing-file preservation: in this repo, `.opencode/opencode.jsonc` exists; change a model in TUI; confirm `agent.<active>.model` updated and surrounding comments intact
+- [x] Manual verification — scaffold path: fresh git repo at `/tmp/fresh-repo`, run TUI, confirm scaffold at `/tmp/fresh-repo/.opencode/opencode.json` + info toast
+- [x] Manual verification — non-git dir: `cd /tmp/no-git-dir && opencode`, change model, confirm scaffold at `/tmp/no-git-dir/.opencode/opencode.json` (NOT `/.opencode/opencode.json`)
+- [x] Manual verification — `OPENCODE_CONFIG=/tmp/oc.jsonc` overrides project write target
+- [x] Manual verification — `OPENCODE_CONFIG_DIR=/tmp/oc-dir` overrides project write target
+- [x] Manual verification — `OPENCODE_DISABLE_PROJECT_CONFIG=1` skips project write entirely
+- [x] Manual verification — `OPENCODE_CONFIG_DIR=/proc/test` triggers safety-check warning toast at startup; project write suppressed
+- [x] Manual verification — induce project-write failure (chmod target read-only mid-session); assert persistent status indicator appears, toast on each failed save, indicator clears when permissions are restored and next save succeeds
+- [x] `bun test packages/opencode/test/config/model-persistence.test.ts` passes (all 20 cases)
+- [x] `bun turbo typecheck` passes
+- [x] Append the following paragraph to `packages/opencode/AGENTS.md` (audit f6-R5):
   > TUI model selections (`agent.<name>.model`) are persisted to project config (`.opencode/opencode.json`, walking up from cwd to git worktree). Only agents the user explicitly changes in the TUI session are written — `dirtyAgents: Set<string>` filtering prevents leaking the user's prior cross-project selections into a team config. The write target is auto-resolved via `Flag.OPENCODE_CONFIG` > `Flag.OPENCODE_CONFIG_DIR` > innermost existing project file > `.opencode/` dir > scaffold at worktree root, with a path-safety check refusing `/`, `/proc`, `/dev`, `/sys`, and paths above `$HOME` without an env override. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to disable; `recent`/`favorite`/`variant` remain user-local. Write failures surface a persistent status indicator and retry the same `dirtyAgents` on the next change. `OPENCODE_CONFIG*` env var changes require a TUI restart to take effect at the cache layer.
-- [ ] Document `OPENCODE_DISABLE_PROJECT_CONFIG`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` (write-side semantics + cache-staleness limitation requiring TUI restart) in the appropriate `packages/docs` env-var/configuration page (audit f9-R5). If no such page exists yet, append to `packages/opencode/AGENTS.md` env-var section alongside the paragraph above.
-- [ ] Confirm `jsonc-parser` produces clean diffs on the project's actual `.opencode/opencode.jsonc` (visual inspection — `patchJsonc` reuses the same machinery as `updateGlobal`, so any layout that works for `updateGlobal` works here)
+- [x] Document `OPENCODE_DISABLE_PROJECT_CONFIG`, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` (write-side semantics + cache-staleness limitation requiring TUI restart) in the appropriate `packages/docs` env-var/configuration page (audit f9-R5). If no such page exists yet, append to `packages/opencode/AGENTS.md` env-var section alongside the paragraph above.
+- [x] Confirm `jsonc-parser` produces clean diffs on the project's actual `.opencode/opencode.jsonc` (visual inspection — `patchJsonc` reuses the same machinery as `updateGlobal`, so any layout that works for `updateGlobal` works here)
 
 ## Convergence Criteria
 

@@ -20,9 +20,13 @@ import type {
   Config as Config3,
   ConfigGetErrors,
   ConfigGetResponses,
+  ConfigModelWriteTargetErrors,
+  ConfigModelWriteTargetResponses,
   ConfigProvidersErrors,
   ConfigProvidersResponses,
   ConfigUpdateErrors,
+  ConfigUpdateProjectErrors,
+  ConfigUpdateProjectResponses,
   ConfigUpdateResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute2,
@@ -246,6 +250,7 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptErrors,
   TuiSubmitPromptResponses,
+  UpdateProjectRequest,
   V2ModelListErrors,
   V2ModelListResponses,
   V2ProviderGetErrors,
@@ -726,6 +731,79 @@ export class Config2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  /**
+   * Resolve model write target
+   *
+   * Compute where TUI model selections should be persisted (project config, scaffold, or user-only mode).
+   */
+  public modelWriteTarget<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ConfigModelWriteTargetResponses,
+      ConfigModelWriteTargetErrors,
+      ThrowOnError
+    >({
+      url: "/config/model_write_target",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update project config models
+   *
+   * Persist the given per-agent model selections to the specified project config file.
+   */
+  public updateProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      updateProjectRequest?: UpdateProjectRequest
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "updateProjectRequest", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<ConfigUpdateProjectResponses, ConfigUpdateProjectErrors, ThrowOnError>(
+      {
+        url: "/config/update_project",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
   }
 }
 

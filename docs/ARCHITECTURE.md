@@ -24,6 +24,7 @@ Authoritative architecture detail lives in:
 - `specs/project.md` — project-level spec
 - `packages/opencode/AGENTS.md`, `packages/desktop/AGENTS.md` — package conventions
 - Per-package `README.md` files under `packages/*/README.md`
+- `build_plans/` — converged build plans (e.g. `BUILD_PLAN_001` for TUI model persistence to project config)
 
 ## Top-level layout
 

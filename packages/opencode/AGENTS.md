@@ -133,3 +133,7 @@ Use `Effect.cached` when multiple concurrent callers should share a single in-fl
 Use `EffectBridge` for native or external callbacks (`@parcel/watcher`, `node-pty`, native `fs.watch`, plugin callbacks, etc.) that need to re-enter Effect services with instance/workspace context.
 
 Plain async code should pass explicit context or stay inside an Effect fiber; do not add ambient instance context shims.
+
+## TUI model persistence (BP-001)
+
+TUI model selections (`agent.<name>.model`) are persisted to project config (`.opencode/opencode.json`, walking up from cwd to the git worktree). Only agents the user explicitly changes in the TUI session are written — `dirtyAgents: Set<string>` filtering in `local.tsx` prevents leaking the user's prior cross-project selections into a team config. The write target is auto-resolved (server-side via `ConfigPaths.resolveModelWriteTarget`) by this precedence: `Flag.OPENCODE_CONFIG` > `Flag.OPENCODE_CONFIG_DIR` > innermost existing project file > `.opencode/` dir > scaffold at the worktree root (or cwd if no worktree). A path-safety check refuses `/`, `/proc`, `/dev`, `/sys`, and paths above `$HOME` without an env override. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to disable project writes entirely; `recent`/`favorite`/`variant` remain user-local in `Global.Path.state/model.json`. Write failures surface a persistent status indicator in the sidebar and retry the same `dirtyAgents` set on the next change. `OPENCODE_CONFIG*` env-var changes require a TUI restart for the cached `modelWriteTarget` to update.

@@ -1263,7 +1263,7 @@ export type Config = {
         }
       }
   /**
-   * Enable or configure LSP servers. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.
+   * Enable or configure LSP servers. Set to false to disable, omit or true to enable built-ins, or an object to enable built-ins with overrides.
    */
   lsp?:
     | boolean
@@ -1409,6 +1409,28 @@ export type Provider = {
   }
   models: {
     [key: string]: Model
+  }
+}
+
+export type ModelWriteTarget =
+  | {
+      mode: "user"
+      refusedPath?: string
+      refusedReason?: string
+    }
+  | {
+      mode: "project"
+      path: string
+      source: "OPENCODE_CONFIG" | "OPENCODE_CONFIG_DIR" | "existing_file" | "existing_dot_opencode" | "scaffolded"
+    }
+
+export type UpdateProjectRequest = {
+  targetPath: string
+  models: {
+    [key: string]: {
+      providerID: string
+      modelID: string
+    }
   }
 }
 
@@ -4192,6 +4214,62 @@ export type ConfigProvidersResponses = {
 }
 
 export type ConfigProvidersResponse = ConfigProvidersResponses[keyof ConfigProvidersResponses]
+
+export type ConfigModelWriteTargetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/model_write_target"
+}
+
+export type ConfigModelWriteTargetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigModelWriteTargetError = ConfigModelWriteTargetErrors[keyof ConfigModelWriteTargetErrors]
+
+export type ConfigModelWriteTargetResponses = {
+  /**
+   * Resolved project-config write target
+   */
+  200: ModelWriteTarget
+}
+
+export type ConfigModelWriteTargetResponse = ConfigModelWriteTargetResponses[keyof ConfigModelWriteTargetResponses]
+
+export type ConfigUpdateProjectData = {
+  body?: UpdateProjectRequest
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/update_project"
+}
+
+export type ConfigUpdateProjectErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ConfigUpdateProjectError = ConfigUpdateProjectErrors[keyof ConfigUpdateProjectErrors]
+
+export type ConfigUpdateProjectResponses = {
+  /**
+   * Project config updated
+   */
+  200: boolean
+}
+
+export type ConfigUpdateProjectResponse = ConfigUpdateProjectResponses[keyof ConfigUpdateProjectResponses]
 
 export type ExperimentalConsoleGetData = {
   body?: never

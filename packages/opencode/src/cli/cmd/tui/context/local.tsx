@@ -1,4 +1,4 @@
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { batch, createEffect, createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
@@ -12,6 +12,7 @@ import { Global } from "@opencode-ai/core/global"
 import { iife } from "@/util/iife"
 import { useToast } from "../ui/toast"
 import { useArgs } from "./args"
+import { useProject } from "./project"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { Filesystem } from "@/util/filesystem"
@@ -30,6 +31,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sync = useSync()
     const sdk = useSDK()
     const toast = useToast()
+    const project = useProject()
 
     function isModelValid(model: { providerID: string; modelID: string }) {
       const provider = sync.data.provider.find((x) => x.id === model.providerID)
@@ -106,6 +108,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const model = iife(() => {
       const [modelStore, setModelStore] = createStore<{
         ready: boolean
+        projectWriteFailing: boolean
         model: Record<
           string,
           {
@@ -124,6 +127,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: Record<string, string | undefined>
       }>({
         ready: false,
+        projectWriteFailing: false,
         model: {},
         recent: [],
         favorite: [],
@@ -131,8 +135,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const filePath = path.join(Global.Path.state, "model.json")
+      const dirtyAgents = new Set<string>()
+      // Reactive state lives on modelStore (Solid store); non-reactive bookkeeping flags here.
       const state = {
         pending: false,
+        scaffoldToastShown: false,
       }
 
       function save() {
@@ -141,6 +148,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
         state.pending = false
+
+        // (1) User state always gets the full modelStore.model — preserves cross-project memory locally.
         try {
           writeFileSync(filePath, JSON.stringify({
             model: modelStore.model,
@@ -149,8 +158,67 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             variant: modelStore.variant,
           }, null, 2))
         } catch (e) {
-          console.error("save model failed", e)
+          console.error("save model failed (user state)", e)
         }
+
+        // (2) Project write — only dirty agents, only when target resolved + project mode.
+        const writeTarget = project.instance.modelWriteTarget()
+        if (!writeTarget) {
+          // Target hasn't been fetched yet (bootstrap race). Mark pending so the
+          // createEffect below re-fires save() once ProjectProvider.sync resolves. audit-f1-r12.
+          if (dirtyAgents.size > 0) state.pending = true
+          return
+        }
+        if (writeTarget.mode !== "project") return
+        if (!project.instance.directory()) {
+          state.pending = true
+          return
+        }
+        if (dirtyAgents.size === 0) return
+
+        const models: Record<string, { providerID: string; modelID: string }> = {}
+        for (const name of dirtyAgents) {
+          const m = modelStore.model[name]
+          if (m) models[name] = { providerID: m.providerID, modelID: m.modelID }
+        }
+        if (Object.keys(models).length === 0) return
+
+        const snapshot = new Set(dirtyAgents) // capture before async resolution
+        const targetPath = writeTarget.path
+        const isScaffolding = writeTarget.source === "scaffolded"
+        const workspace = project.workspace.current()
+
+        sdk.client.config
+          .updateProject({ workspace, updateProjectRequest: { targetPath, models } })
+          .then(async () => {
+            snapshot.forEach((n) => dirtyAgents.delete(n))
+            if (modelStore.projectWriteFailing) setModelStore("projectWriteFailing", false)
+            if (isScaffolding && !state.scaffoldToastShown) {
+              state.scaffoldToastShown = true
+              const dir = project.instance.directory()
+              toast.show({
+                variant: "info",
+                message: `Created ${dir ? path.relative(dir, targetPath) : targetPath} for project model config`,
+                duration: 4000,
+              })
+            }
+            // Explicit re-fetch so sync.data.config reflects the write (audit f7-R1).
+            const refreshed = await sdk.client.config
+              .get({ workspace })
+              .catch(() => undefined)
+            if (refreshed?.data) sync.set("config", reconcile(refreshed.data))
+          })
+          .catch((e: unknown) => {
+            console.error("save model failed (project config)", e)
+            // dirtyAgents NOT cleared — next save() retries the same set.
+            setModelStore("projectWriteFailing", true)
+            const msg = e instanceof Error ? e.message : String(e)
+            toast.show({
+              variant: "warning",
+              message: `Project config write failed — will retry on next change. ${msg}`,
+              duration: 4000,
+            })
+          })
       }
 
       Filesystem.readJson(filePath)
@@ -165,6 +233,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setModelStore("ready", true)
           if (state.pending) save()
         })
+
+      // Deferred-flush trigger (audit-r11-f3): if a model change arrived before
+      // ProjectProvider.sync() resolved (state.pending set inside save()'s second
+      // early-return), re-fire save() once the project context becomes defined.
+      createEffect(() => {
+        const directory = project.instance.directory()
+        const target = project.instance.modelWriteTarget()
+        if (state.pending && modelStore.ready && directory && target !== undefined) {
+          save()
+        }
+      })
 
       const args = useArgs()
       const fallbackModel = createMemo(() => {
@@ -222,6 +301,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         get ready() {
           return modelStore.ready
         },
+        projectWriteFailing() {
+          return modelStore.projectWriteFailing
+        },
         recent() {
           return modelStore.recent
         },
@@ -259,6 +341,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const a = agent.current()
           if (!a) return
           setModelStore("model", a.name, { ...val })
+          dirtyAgents.add(a.name)
           save()
         },
         cycleFavorite(direction: 1 | -1) {
@@ -288,6 +371,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           const a = agent.current()
           if (!a) return
           setModelStore("model", a.name, { ...next })
+          dirtyAgents.add(a.name)
           const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
           if (uniq.length > 10) uniq.pop()
           setModelStore(
@@ -309,6 +393,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const a = agent.current()
             if (!a) return
             setModelStore("model", a.name, model)
+            dirtyAgents.add(a.name)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
