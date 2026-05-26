@@ -71,8 +71,10 @@ export const layer: Layer.Layer<
     // `Instructions from: <abs path>` prefix with a short scope tag:
     //   - URL (http/https) → `# <url>`
     //   - Matches a global config file → `# ~/<rel-from-home>`
-    //   - worktree is "/" or empty (non-git/global project) → `# ~/<rel-from-home>` if inside $HOME, else `# <basename>`
-    //   - Else → `# <rel-from-worktree> (project)` (disambiguates root vs per-package AGENTS.md in monorepos)
+    //   - worktree is "/" or empty (non-git/global project) → `# ~/<rel-from-home>` if inside $HOME, else absolute
+    //   - Inside the worktree → `# <rel-from-worktree> (project)` (disambiguates monorepo per-package vs root AGENTS.md)
+    //   - Else (worktree set but item outside it — e.g. `config.instructions: /opt/team-rules.md`) → tildeify only,
+    //     no "(project)" tag, so the label isn't misleading.
     function labelFor(item: string, worktree: string | undefined): string {
       if (item.startsWith("https://") || item.startsWith("http://")) return `# ${item}`
       const real = path.resolve(item)
@@ -82,8 +84,13 @@ export const layer: Layer.Layer<
       if (!worktree || worktree === "" || worktree === "/") {
         return `# ${tildeify(real)}`
       }
-      const rel = path.relative(worktree, real)
-      return `# ${rel || path.basename(real)} (project)`
+      const worktreeSep = worktree + path.sep
+      if (real === worktree || real.startsWith(worktreeSep)) {
+        const rel = path.relative(worktree, real)
+        return `# ${rel || path.basename(real)} (project)`
+      }
+      // Path is outside the worktree — `(project)` would mislead.
+      return `# ${tildeify(real)}`
     }
 
     const state = yield* InstanceState.make(

@@ -252,7 +252,7 @@ Numbering continues monotonically from Phase 2's Step 5. Order is fail-fast: typ
 - [x] **Step 13 — Append behavior note to `packages/opencode/AGENTS.md`** using the *measured* delta from Step 9. **Substitution responsibility** (audit po-r1 f1): replace `{{measured}}` with the harness-reported new total, and `{{delta}}` with `4549 - {{measured}}`. Template:
 
   > **System prompt budget (BP-002).** The first-message system prompt was reduced from ~4,549 to ~{{measured}} tokens (delta ≈ {{delta}}) by trimming the global `~/.config/opencode/AGENTS.md` (kept 4 high-bite behavioral rules; removed Crux-framework + cruxdev-routing sections), dropping the verbose-XML `<location>` field from skill emission, dropping the redundant skills preamble, and shortening the `Instructions from:` prefix to a scope-aware label (`# ~/<rel-path>` for global, `# <worktree-relative-path> (project)` for project files). See `build_plans/BUILD_PLAN_002_*.md` for the audit trail. Project AGENTS.md content is unchanged; project-specific rules still apply.
-- [ ] **Step 14 — Commit** (audit po-r0 f7): explicitly stage the following six files; do NOT use `git add -A`:
+- [x] **Step 14 — Commit** (audit po-r0 f7): explicitly stage the following six files; do NOT use `git add -A`:
   ```bash
   # Sanity check: confirm the transient debug instrumentation from Step 6 was reverted.
   ! grep -q 'BP-002 TEMP' packages/opencode/src/session/llm/request.ts \
