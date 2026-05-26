@@ -234,7 +234,7 @@ export const Info = Schema.Struct({
     description:
       "Enable or configure formatters. Omit or set to false to disable, true to enable built-ins, or an object to enable built-ins with overrides.",
   }),
-  lsp: Schema.optional(ConfigLSP.Info, { default: () => true }).annotate({
+  lsp: Schema.optional(ConfigLSP.Info).annotate({
     description:
       "Enable or configure LSP servers. Set to false to disable, omit or true to enable built-ins, or an object to enable built-ins with overrides.",
   }),
