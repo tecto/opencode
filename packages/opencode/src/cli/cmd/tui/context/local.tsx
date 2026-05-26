@@ -7,6 +7,7 @@ import { useRoute } from "@tui/context/route"
 import { useEvent } from "@tui/context/event"
 import { uniqueBy } from "remeda"
 import path from "path"
+import { writeFileSync } from "fs"
 import { Global } from "@opencode-ai/core/global"
 import { iife } from "@/util/iife"
 import { useToast } from "../ui/toast"
@@ -140,12 +141,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return
         }
         state.pending = false
-        void Filesystem.writeJson(filePath, {
-          model: modelStore.model,
-          recent: modelStore.recent,
-          favorite: modelStore.favorite,
-          variant: modelStore.variant,
-        })
+        try {
+          writeFileSync(filePath, JSON.stringify({
+            model: modelStore.model,
+            recent: modelStore.recent,
+            favorite: modelStore.favorite,
+            variant: modelStore.variant,
+          }, null, 2))
+        } catch (e) {
+          console.error("save model failed", e)
+        }
       }
 
       Filesystem.readJson(filePath)
