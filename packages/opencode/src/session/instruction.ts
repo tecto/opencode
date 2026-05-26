@@ -1,4 +1,5 @@
 import path from "path"
+import { realpathSync } from "fs"
 import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Config } from "@/config/config"
@@ -66,6 +67,17 @@ export const layer: Layer.Layer<
     ]
     const resolvedGlobalFiles = globalFiles.map((f) => path.resolve(f))
     const instructionFiles = files(flags.disableClaudeCodePrompt)
+    // Best-effort realpath of $HOME: handles macOS where /var is symlinked to /private/var,
+    // or any custom $HOME that resolves to a different real path. Falls back to global.home
+    // if realpath fails (e.g. home doesn't exist on disk in test fixtures).
+    const homeReal = (() => {
+      try {
+        return realpathSync.native(global.home)
+      } catch {
+        return global.home
+      }
+    })()
+    const homePrefixes = Array.from(new Set([global.home + path.sep, homeReal + path.sep]))
 
     // Scope-aware label for instruction provenance. Replaces the long
     // `Instructions from: <abs path>` prefix with a short scope tag:
@@ -78,8 +90,12 @@ export const layer: Layer.Layer<
     function labelFor(item: string, worktree: string | undefined): string {
       if (item.startsWith("https://") || item.startsWith("http://")) return `# ${item}`
       const real = path.resolve(item)
-      const homeWithSep = global.home + path.sep
-      const tildeify = (p: string) => (p.startsWith(homeWithSep) ? "~/" + p.slice(homeWithSep.length) : p)
+      const tildeify = (p: string) => {
+        for (const prefix of homePrefixes) {
+          if (p.startsWith(prefix)) return "~/" + p.slice(prefix.length)
+        }
+        return p
+      }
       if (resolvedGlobalFiles.includes(real)) return `# ${tildeify(real)}`
       if (!worktree || worktree === "" || worktree === "/") {
         return `# ${tildeify(real)}`
