@@ -67,13 +67,10 @@ export const layer = Layer.effect(
 
         const list = yield* skill.available(agent)
 
-        return [
-          "Skills provide specialized instructions and workflows for specific tasks.",
-          "Use the skill tool to load a skill when a task matches its description.",
-          // the agents seem to ingest the information about skills a bit better if we present a more verbose
-          // version of them here and a less verbose version in tool description, rather than vice versa.
-          Skill.fmt(list, { verbose: true }),
-        ].join("\n")
+        // The skill tool's own description explains what skills are; the preamble was redundant.
+        // Verbose XML is retained because agents ingest skill metadata better here than in the
+        // tool description (preserves the trade-off noted in the original code).
+        return Skill.fmt(list, { verbose: true })
       }),
     })
   }),

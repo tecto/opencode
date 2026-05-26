@@ -64,7 +64,27 @@ export const layer: Layer.Layer<
       path.join(global.config, "AGENTS.md"),
       ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
+    const resolvedGlobalFiles = globalFiles.map((f) => path.resolve(f))
     const instructionFiles = files(flags.disableClaudeCodePrompt)
+
+    // Scope-aware label for instruction provenance. Replaces the long
+    // `Instructions from: <abs path>` prefix with a short scope tag:
+    //   - URL (http/https) → `# <url>`
+    //   - Matches a global config file → `# ~/<rel-from-home>`
+    //   - worktree is "/" or empty (non-git/global project) → `# ~/<rel-from-home>` if inside $HOME, else `# <basename>`
+    //   - Else → `# <rel-from-worktree> (project)` (disambiguates root vs per-package AGENTS.md in monorepos)
+    function labelFor(item: string, worktree: string | undefined): string {
+      if (item.startsWith("https://") || item.startsWith("http://")) return `# ${item}`
+      const real = path.resolve(item)
+      const homeWithSep = global.home + path.sep
+      const tildeify = (p: string) => (p.startsWith(homeWithSep) ? "~/" + p.slice(homeWithSep.length) : p)
+      if (resolvedGlobalFiles.includes(real)) return `# ${tildeify(real)}`
+      if (!worktree || worktree === "" || worktree === "/") {
+        return `# ${tildeify(real)}`
+      }
+      const rel = path.relative(worktree, real)
+      return `# ${rel || path.basename(real)} (project)`
+    }
 
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
@@ -153,6 +173,7 @@ export const layer: Layer.Layer<
 
     const system = Effect.fn("Instruction.system")(function* () {
       const config = yield* cfg.get()
+      const ctx = yield* InstanceState.context
       const paths = yield* systemPaths()
       const urls = (config.instructions ?? []).filter(
         (item) => item.startsWith("https://") || item.startsWith("http://"),
@@ -162,8 +183,8 @@ export const layer: Layer.Layer<
       const remote = yield* Effect.forEach(urls, fetch, { concurrency: 4 })
 
       return [
-        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`Instructions from: ${item}\n${files[i]}`] : [])),
-        ...urls.flatMap((item, i) => (remote[i] ? [`Instructions from: ${item}\n${remote[i]}`] : [])),
+        ...Array.from(paths).flatMap((item, i) => (files[i] ? [`${labelFor(item, ctx.worktree)}\n${files[i]}`] : [])),
+        ...urls.flatMap((item, i) => (remote[i] ? [`${labelFor(item, ctx.worktree)}\n${remote[i]}`] : [])),
       ]
     })
 
@@ -180,6 +201,7 @@ export const layer: Layer.Layer<
       filepath: string,
       messageID: MessageID,
     ) {
+      const ctx = yield* InstanceState.context
       const sys = yield* systemPaths()
       const already = extract(messages)
       const results: { filepath: string; content: string }[] = []
@@ -210,7 +232,7 @@ export const layer: Layer.Layer<
         set.add(found)
         const content = yield* read(found)
         if (content) {
-          results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+          results.push({ filepath: found, content: `${labelFor(found, ctx.worktree)}\n${content}` })
         }
 
         current = path.dirname(current)

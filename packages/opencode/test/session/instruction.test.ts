@@ -212,8 +212,11 @@ describe("Instruction.system", () => {
 
         const rules = yield* svc.system()
         expect(rules).toHaveLength(2)
-        expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
-        expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
+        // BP-002: scope-aware label. Global file (home === globalTmp) tildeifies to `~/AGENTS.md`.
+        // Project file lives outside the fake home; non-git tmp dirs produce worktree="/" so the
+        // labelFor non-worktree branch fires and returns the absolute path unchanged.
+        expect(rules[0]).toBe(`# ~/AGENTS.md\n# Global Instructions`)
+        expect(rules[1]).toBe(`# ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )

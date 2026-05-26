@@ -1,5 +1,7 @@
 # BUILD_PLAN_002: Trim global AGENTS.md + skills XML to halve first-message system prompt
 
+**Status**: CONVERGED (2026-05-26, convergence_id `87433de0`) — 10 audit rounds across Planning, PatternAssessment ×2, PatternOrchestration ×2, PlanAuditing ×2, DocAlignment ×2, Viability ×2. ~30 findings applied. Final two Viability passes clean from distinct agents.
+
 ## Document Alignment
 
 - `packages/opencode/src/session/system.ts:50-77` — environment + skills assembly site (where the prompt is emitted)
@@ -78,7 +80,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
 
 ## Phase 2: Implementation
 
-- [ ] **Step 1 — Backup global AGENTS.md (guarded).**
+- [x] **Step 1 — Backup global AGENTS.md (guarded).**
 
   ```bash
   if [ -f ~/.config/opencode/AGENTS.md ]; then
@@ -92,7 +94,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
 
   If the file exists, verify both backups: `diff ~/.config/opencode/AGENTS.md ~/.config/opencode/AGENTS.md.pre-bp002.bak` and `diff ~/.config/opencode/AGENTS.md .cruxdev/bp002-backup/global_AGENTS.md.pre-bp002.bak` both return empty.
 
-- [ ] **Step 2 — Rewrite global AGENTS.md.**
+- [x] **Step 2 — Rewrite global AGENTS.md.**
 
   Replace entire file contents with the compressed version below. Preserves the 4 highest-bite behavioral rules and drops the two project-specific frameworks entirely.
 
@@ -107,7 +109,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
 
   Total: ~123 cl100k tokens for the compressed block. Down from the file's 2,149 — net savings on this file is ~2,026 tokens.
 
-- [ ] **Step 3 — Tighten skill XML emission in `packages/opencode/src/skill/index.ts`.**
+- [x] **Step 3 — Tighten skill XML emission in `packages/opencode/src/skill/index.ts`.**
 
   Current `fmt(list, { verbose: true })` emits per-skill:
 
@@ -130,7 +132,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
     </skill>
   ```
 
-- [ ] **Step 4 — Drop redundant skills preamble in `packages/opencode/src/session/system.ts:71-76`.**
+- [x] **Step 4 — Drop redundant skills preamble in `packages/opencode/src/session/system.ts:71-76`.**
 
   Current emission:
 
@@ -144,7 +146,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
 
   The first two lines duplicate the skill tool's own description (which the model receives with the tool definition). Drop them; return `Skill.fmt(list, { verbose: true })` alone (the call signature is unchanged — both args still required). Saves ~50 tokens.
 
-- [ ] **Step 5 — Tighten instruction prefix in `packages/opencode/src/session/instruction.ts` while preserving global-vs-project AND inter-project disambiguation.**
+- [x] **Step 5 — Tighten instruction prefix in `packages/opencode/src/session/instruction.ts` while preserving global-vs-project AND inter-project disambiguation.**
 
   Current at `:165`:
 
@@ -208,7 +210,7 @@ No source changes outside `packages/opencode/src/{session,skill}`. No schema cha
 
 Numbering continues monotonically from Phase 2's Step 5. Order is fail-fast: typecheck/tests before manual TUI work, harness-dependent verification immediately after the harness run.
 
-- [ ] **Step 6 — Measurement via transient debug instrumentation.** **Required** (audit po-r0 f4 — convergence criterion #1 depends on it).
+- [x] **Step 6 — Measurement via transient debug instrumentation.** **Required** (audit po-r0 f4 — convergence criterion #1 depends on it).
 
   Audit pl-r1 f1 ruled out two earlier approaches: composing 8+ Effect layers in a standalone script (too complex), and reading `~/.local/share/opencode/log/` (only error-path requests log the system body). The actually-feasible approach is a **transient debug log** at the system-prompt assembly site, captured during one real opencode session and reverted before commit.
 
@@ -235,19 +237,19 @@ Numbering continues monotonically from Phase 2's Step 5. Order is fail-fast: typ
   5. **Revert the temporary patch** at request.ts:64 before Step 14's commit. Add a sanity check to Step 14: `! grep -q 'BP-002 TEMP' packages/opencode/src/session/llm/request.ts` before `git add`.
 
   This approach trades a 5-line transient patch + revert for the simplicity of measuring against the actual production code path. Auto-captures plugin-injected content (audit pa-r0 f5 — the patched site is downstream of all transforms).
-- [ ] **Step 7 — `bun turbo typecheck` passes.** Fail-fast: any type error in Steps 2-5 surfaces here before we waste manual time.
-- [ ] **Step 8 — `bun test packages/opencode/test/` passes.** No regressions in the prompt assembly path.
-- [ ] **Step 9 — Run the harness from Step 6; record the new token total.** Convergence criterion: delta ≥ 1,500 tokens from the 4,549-token baseline.
-- [ ] **Step 10 — Verify Step 5's scope-aware labels** (audit po-r0 f3): start opencode TUI in `packages/opencode/`; inspect the first-message system prompt via Step 9's harness output and confirm three distinct label forms appear — `# ~/.config/opencode/AGENTS.md`, `# AGENTS.md (project)`, AND `# packages/opencode/AGENTS.md (project)`. If only two appear (collision), Step 5 has regressed. (Scheduled immediately after the harness run because it consumes harness output.)
-- [ ] **Step 11 — Manual A/B verifications** (acknowledged weak signal per Risk 7; backups are ready for one-`cp` rollback):
+- [x] **Step 7 — `bun turbo typecheck` passes.** Fail-fast: any type error in Steps 2-5 surfaces here before we waste manual time.
+- [x] **Step 8 — `bun test packages/opencode/test/` passes.** No regressions in the prompt assembly path.
+- [x] **Step 9 — Run the harness from Step 6; record the new token total.** Convergence criterion: delta ≥ 1,500 tokens from the 4,549-token baseline.
+- [x] **Step 10 — Verify Step 5's scope-aware labels** (audit po-r0 f3): start opencode TUI in `packages/opencode/`; inspect the first-message system prompt via Step 9's harness output and confirm three distinct label forms appear — `# ~/.config/opencode/AGENTS.md`, `# AGENTS.md (project)`, AND `# packages/opencode/AGENTS.md (project)`. If only two appear (collision), Step 5 has regressed. (Scheduled immediately after the harness run because it consumes harness output.)
+- [x] **Step 11 — Manual A/B verifications** (acknowledged weak signal per Risk 7; backups are ready for one-`cp` rollback):
   - Refactor task ("split this function and remove unused imports"): confirm the surgical-edits-only constraint still lands
   - Debug task ("this test fails, why"): confirm goal-driven execution + ask-when-uncertain behavior is unchanged
   - Non-cruxdev directory (`cd /tmp/scratch && opencode`): confirm no Crux routing rules surface in the system prompt
   - `/skills` listing: confirm all skills appear with correct names and descriptions (Step 3 only dropped `<location>`, not the skill)
-- [ ] **Step 12 — Diff backups.**
+- [x] **Step 12 — Diff backups.**
   - `diff ~/.config/opencode/AGENTS.md ~/.config/opencode/AGENTS.md.pre-bp002.bak` shows only the intended rewrite
   - `.cruxdev/bp002-backup/global_AGENTS.md.pre-bp002.bak` exists and matches `~/.config/opencode/AGENTS.md.pre-bp002.bak` (or both absent if Step 1's guard skipped them; audit po-r0 f5)
-- [ ] **Step 13 — Append behavior note to `packages/opencode/AGENTS.md`** using the *measured* delta from Step 9. **Substitution responsibility** (audit po-r1 f1): replace `{{measured}}` with the harness-reported new total, and `{{delta}}` with `4549 - {{measured}}`. Template:
+- [x] **Step 13 — Append behavior note to `packages/opencode/AGENTS.md`** using the *measured* delta from Step 9. **Substitution responsibility** (audit po-r1 f1): replace `{{measured}}` with the harness-reported new total, and `{{delta}}` with `4549 - {{measured}}`. Template:
 
   > **System prompt budget (BP-002).** The first-message system prompt was reduced from ~4,549 to ~{{measured}} tokens (delta ≈ {{delta}}) by trimming the global `~/.config/opencode/AGENTS.md` (kept 4 high-bite behavioral rules; removed Crux-framework + cruxdev-routing sections), dropping the verbose-XML `<location>` field from skill emission, dropping the redundant skills preamble, and shortening the `Instructions from:` prefix to a scope-aware label (`# ~/<rel-path>` for global, `# <worktree-relative-path> (project)` for project files). See `build_plans/BUILD_PLAN_002_*.md` for the audit trail. Project AGENTS.md content is unchanged; project-specific rules still apply.
 - [ ] **Step 14 — Commit** (audit po-r0 f7): explicitly stage the following six files; do NOT use `git add -A`:
