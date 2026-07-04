@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { applyProbeMergeToLimit, isLMStudioProvider, probeLMStudio } from "./lmstudio-probe"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1403,6 +1404,20 @@ export const layer = Layer.effect(
             models: existing?.models ?? {},
           }
 
+          // BP-003: hoisted LM Studio context probe (one HTTP round-trip per
+          // detected provider, before the inner model loop). Guards: skip when
+          // the provider is filtered by `disabled_providers`/`enabled_providers`
+          // via `isProviderAllowed` (line 1361-1365); skip when detection fails.
+          const probeBaseURL =
+            typeof parsed.options?.["baseURL"] === "string" && parsed.options["baseURL"] !== ""
+              ? (parsed.options["baseURL"] as string)
+              : ""
+          const probed =
+            isProviderAllowed(ProviderV2.ID.make(providerID)) &&
+            isLMStudioProvider(providerID, parsed)
+              ? yield* Effect.promise(() => probeLMStudio(probeBaseURL))
+              : undefined
+
           for (const [modelID, model] of Object.entries(provider.models ?? {})) {
             const existingModel = parsed.models[model.id ?? modelID]
             const apiID = model.id ?? existingModel?.api.id ?? modelID
@@ -1465,11 +1480,14 @@ export const layer = Layer.effect(
                 },
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
-              limit: {
-                context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-                input: model.limit?.input ?? existingModel?.limit?.input,
-                output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
-              },
+              limit: applyProbeMergeToLimit(
+                {
+                  context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+                  input: model.limit?.input ?? existingModel?.limit?.input,
+                  output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
+                },
+                probed?.get(String(model.id ?? modelID).toLowerCase()),
+              ),
               headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
