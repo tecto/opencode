@@ -1,7 +1,7 @@
 # BP-005 — pre-request compaction guard (V1)
 
 **UUID:** `2df7f10f`. **Type:** FIX-BP.
-**Lifecycle: CONVERGED**
+**Lifecycle: EXECUTED**
 
 | | |
 |---|---|
