@@ -1,0 +1,47 @@
+[
+  {
+    "round": 1,
+    "frontier_model": "ornith-1.0-35b-mtp",
+    "tier0": 0,
+    "local_confirmed": 1,
+    "frontier_confirmed": 0,
+    "clean": false,
+    "audited_ok": true
+  },
+  {
+    "round": 2,
+    "frontier_model": "ornith-1.0-35b-mtp",
+    "tier0": 0,
+    "local_confirmed": 2,
+    "frontier_confirmed": 0,
+    "clean": false,
+    "audited_ok": true
+  },
+  {
+    "round": 3,
+    "frontier_model": "ornith-1.0-35b-mtp",
+    "tier0": 0,
+    "local_confirmed": 3,
+    "frontier_confirmed": 0,
+    "clean": false,
+    "audited_ok": true
+  },
+  {
+    "round": 4,
+    "frontier_model": "ornith-1.0-35b-mtp",
+    "tier0": 0,
+    "local_confirmed": 2,
+    "frontier_confirmed": 0,
+    "clean": false,
+    "audited_ok": true
+  },
+  {
+    "round": 5,
+    "frontier_model": "ornith-1.0-35b-mtp",
+    "tier0": 0,
+    "local_confirmed": 0,
+    "frontier_confirmed": 0,
+    "clean": true,
+    "audited_ok": true
+  }
+]

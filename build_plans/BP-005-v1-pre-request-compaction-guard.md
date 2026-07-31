@@ -1,7 +1,7 @@
 # BP-005 — pre-request compaction guard (V1)
 
 **UUID:** `2df7f10f`. **Type:** FIX-BP.
-**Lifecycle: PLANNED**
+**Lifecycle: CONVERGED**
 
 | | |
 |---|---|
@@ -55,9 +55,11 @@ readonly estimateAndCompactIfNeeded: (input: {
 }) => Effect.Effect<boolean> // true if compaction was triggered, false if safe
 ```
 
-Implementation mirrors V2's `compactIfNeeded` logic but uses V1's `estimate()` helper and `Provider.Model`:
+Implementation mirrors V2's `compactIfNeeded` logic but uses V1's `estimate()` helper and `Provider.Model`. The session context (`sessionID`, agent) and the V2 ID constructor must be injected into the implementation closure via parameters or dependency injection, as they are not in scope within `compaction.ts`:
 
 ```ts
+import { ProviderTransform } from "../core/src/session/transform"
+
 const estimateAndCompactIfNeeded = Effect.fn("SessionCompaction.estimateAndCompactIfNeeded")(function* (input: {
   messages: SessionV1.WithParts[]
   model: Provider.Model
@@ -72,8 +74,8 @@ const estimateAndCompactIfNeeded = Effect.fn("SessionCompaction.estimateAndCompa
   if (estimatedTokens <= usableContext) return false
   // Trigger compaction via create → loop will pick up the task next iteration
   yield* create({
-    sessionID: ctx.sessionID,
-    agent: lastUser.agent,
+    sessionID: injectedSessionContext.sessionID,
+    agent: injectedSessionContext.agent,
     model: { providerID: input.model.providerID, modelID: ModelV2.ID.make(input.model.id) },
     auto: true,
   })
@@ -120,7 +122,7 @@ The V2 version expects `LLMRequest` shape (system/messages/tools arrays), while 
 |-----------|-------|-------|
 | add-method-to-interface | `packages/opencode/src/session/compaction.ts` | `Interface.estimateAndCompactIfNeeded`, `Service.estimateAndCompactIfNeeded` |
 | insert-pre-request-call | `packages/opencode/src/session/prompt.ts` | loop body ~line 1141–1160 |
-| tests | `packages/opencode/test/` | compaction + prompt integration |
+| tests | `packages/opencode/test/unit/compaction.test.ts`, `packages/opencode/test/integration/prompt-loop-integration.test.ts` | compaction + prompt integration |
 
 ## Follow-on (NOT this BP)
 - Fix the underlying LM Studio probe reliability issue when a model isn't loaded yet (BP-003 handles detection; this doesn't fix missing context at runtime)
