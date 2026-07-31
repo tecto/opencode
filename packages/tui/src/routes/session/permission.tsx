@@ -1,5 +1,4 @@
 import { createStore } from "solid-js/store"
-import { dirname } from "node:path"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
@@ -9,6 +8,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../ui/border"
 import { useSync } from "../../context/sync"
 import { useProject } from "../../context/project"
+import { dirname } from "node:path"
 import { filetype } from "../../util/filetype"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
@@ -26,14 +26,8 @@ function EditBody(props: { request: PermissionRequest }) {
   const config = useTuiConfig()
   const dimensions = useTerminalDimensions()
 
-  const filepath = createMemo(() => {
-    const value = props.request.metadata?.filepath
-    return typeof value === "string" ? value : ""
-  })
-  const diff = createMemo(() => {
-    const value = props.request.metadata?.diff
-    return typeof value === "string" ? value : ""
-  })
+  const filepath = createMemo(() => (props.request.metadata?.filepath as string) ?? "")
+  const diff = createMemo(() => (props.request.metadata?.diff as string) ?? "")
 
   const view = createMemo(() => {
     const diffStyle = config.diff_style
@@ -168,8 +162,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             void sdk.client.permission.reply({
               reply: "always",
               requestID: props.request.id,
-              directory: props.directory,
-              workspace: project.workspace.current(),
+              directory: session()?.directory,
+              workspace: session()?.workspaceID ?? project.workspace.current(),
             })
           }}
         />
@@ -180,9 +174,9 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             void sdk.client.permission.reply({
               reply: "reject",
               requestID: props.request.id,
-              directory: props.directory,
               message: message || undefined,
-              workspace: project.workspace.current(),
+              directory: session()?.directory,
+              workspace: session()?.workspaceID ?? project.workspace.current(),
             })
           }}
           onCancel={() => {
@@ -269,10 +263,12 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             }
 
             if (permission === "bash") {
+              const title =
+                typeof data.description === "string" && data.description ? data.description : "Shell command"
               const command = typeof data.command === "string" ? data.command : ""
               return {
                 icon: "#",
-                title: "Shell command",
+                title,
                 body: (
                   <Show when={command}>
                     <box paddingLeft={1}>
@@ -418,16 +414,16 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                   void sdk.client.permission.reply({
                     reply: "reject",
                     requestID: props.request.id,
-                    directory: props.directory,
-                    workspace: project.workspace.current(),
+                    directory: session()?.directory,
+                    workspace: session()?.workspaceID ?? project.workspace.current(),
                   })
                   return
                 }
                 void sdk.client.permission.reply({
                   reply: "once",
                   requestID: props.request.id,
-                  directory: props.directory,
-                  workspace: project.workspace.current(),
+                  directory: session()?.directory,
+                  workspace: session()?.workspaceID ?? project.workspace.current(),
                 })
               }}
             />
