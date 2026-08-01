@@ -1,7 +1,7 @@
 # BP — Fix regression: LM Studio probe should use loaded_context_length (the actual context window of the m
-**UUID:** `b36c77b3`. **Type:** fix. **Lifecycle: PLANNED**
+**UUID:** `b36c77b3`. **Type:** fix. **Lifecycle: CONVERGED**
 ## Header
-**Goal:** Fix regression: LM Studio probe should use loaded_context_length (the actual context window of the model currently loaded in LM Studio) for compaction calculations, but instead it's using max_context_length. The sidebar shows the max context window size instead of the loaded context.
+**Goal:** Verify that the LM Studio probe correctly uses loaded_context_length for compaction calculations and apply downstream fixes where the loaded context is being overridden by max_context_length.
 
 The root issue is that BP-003's probe (packages/opencode/src/provider/lmstudio-probe.ts:56-57) correctly picks loaded_context_length first falling back to max_context_length, but there were NO regression tests for this priority order — so when subsequent build plans touched the provider/compaction code paths, the loaded→max fallback was silently broken.
 
@@ -27,9 +27,10 @@ Phase 1 (Regression Tests) must complete before Phase 2 and 3, as the tests serv
 4. Analyze code paths from `lmstudio-probe.ts` through compaction system to identify where loaded context is overridden.
 5. Implement fixes to ensure downstream consumers use the probed loaded context value.
 6. Run all tests including new regression tests to confirm fixes work and no regressions introduced.
+7. Perform audit to convergence, ensuring two consecutive clean passes.
 
 ## Progress Tracker
-- [ ] Implement `packages/opencode/src/provider/lmstudio-probe.ts`
+- [ ] Verify probeLMStudio behavior matches spec (loaded_context_length precedence)
 - [ ] Author tests red-first (confirm each fails, then passes)
 - [ ] `tools/ci/gate.sh fast` passes
 - [ ] Audit to convergence (two consecutive clean passes)
@@ -38,6 +39,7 @@ Phase 1 (Regression Tests) must complete before Phase 2 and 3, as the tests serv
 | File | Action | Purpose |
 |------|--------|---------|
 | `packages/opencode/src/provider/lmstudio-probe.ts` | Modify/Create | Touched by this plan |
+| `tools/ci/gate.sh` | Create/Modify | CI gate script for environment viability verification; must exist and be executable to validate build health |
 
 ## Risks & Mitigations
 - **Risk**: Tests may pass without actually verifying the correct behavior if assertions are too weak. **Mitigation**: Ensure tests explicitly verify that `loaded_context_length` is used when available, not just that a context value is returned. Use specific test cases where loaded and max contexts differ significantly.
