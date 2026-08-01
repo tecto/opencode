@@ -30,8 +30,8 @@ Phase 1 (Regression Tests) must complete before Phase 2 and 3, as the tests serv
 7. Perform audit to convergence, ensuring two consecutive clean passes.
 
 ## Progress Tracker
-- [ ] Verify probeLMStudio behavior matches spec (loaded_context_length precedence)
-- [ ] Author tests red-first (confirm each fails, then passes)
+- [x] Verify probeLMStudio behavior matches spec (loaded_context_length precedence) — confirmed via 5 new regression tests in lmstudio-probe.test.ts
+- [x] Author tests red-first (confirm each fails, then passes) — 5 regression tests added and passing
 - [ ] `tools/ci/gate.sh fast` passes
 - [ ] Audit to convergence (two consecutive clean passes)
 
