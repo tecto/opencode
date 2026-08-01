@@ -618,7 +618,148 @@ describe("provider layer integration", () => {
   )
 })
 
-// ─── Regression test (isOverflow fires) ────────────────────────────────────
+// ─── Regression tests (loaded_context_length priority must be pinned) ──────
+
+describe("regression: loaded_context_length must beat max_context_length everywhere", () => {
+  // These tests pin the exact contract that was broken when no regression
+  // tests existed for this priority order. If any future build plan changes
+  // how probes flow through the provider layer, these tests catch it.
+
+  test("test_probe_priority_loaded_over_max_in_single_response", async () => {
+    // The motivating case: a model is loaded with context < its max declared.
+    // Probe must return loaded, not max. This is the regression that BP-005-era
+    // changes broke (no tests existed to catch it).
+    const { server, url } = await startMockLMStudio({
+      body: {
+        data: [
+          {
+            id: "ornith-1.0-35b-mtp-apex",
+            state: "loaded",
+            loaded_context_length: 131072,
+            max_context_length: 262144, // double the loaded value — the regression trigger
+          },
+        ],
+      },
+    })
+    try {
+      const result = await probeLMStudio(`${url}/v1`)
+      const probed = result.get("ornith-1.0-35b-mtp-apex")
+      expect(probed).toBeDefined()
+      // The regression: if this ever equals 262144, the loaded→max fallback broke.
+      expect(probed!.context).toBe(131072)
+      expect(probed!.output).toBe(Math.min(Math.floor(131072 / 4), 8192)) // 8192
+    } finally {
+      await closeServer(server)
+    }
+  })
+
+  test("test_applyProbe_merge_keeps_loaded_when_existing_zero", () => {
+    // Simulates Site B receiving a probe where loaded < max. The merge must
+    // preserve loaded_context_length, not revert to any cached maximum.
+    const result = applyProbeToModel(
+      { context: 0, output: 0 }, // config has no limits (the typical LM Studio user case)
+      { context: 131_072, output: 8_192 }, // probe returned loaded_context_length
+    )
+    expect(result.context).toBe(131_072)
+    expect(result.output).toBe(8_192)
+
+    const resultMax = applyProbeToModel(
+      { context: 0, output: 0 },
+      { context: 262_144, output: 16_384 }, // what it would be if max were used instead
+    )
+    expect(resultMax.context).toBe(262_144) // would be wrong for a loaded model
+
+    // The regression guard: when config is zero (unconfigured LM Studio user),
+    // the probed value IS what gets stored. If any downstream code overwrites
+    // this with max_context_length, these tests fail.
+    const merged = applyProbeMergeToLimit(
+      { context: 0, output: 0, input: undefined },
+      { context: 131_072, output: 8_192 },
+    )
+    expect(merged.context).toBe(131_072)
+    expect(merged.output).toBe(8_192)
+  })
+
+  test("test_isOverflow_uses_loaded_context_not_max", () => {
+    // isOverflow reads model.limit.context. After probe, this must be the loaded
+    // value (e.g., 131072), NOT the max (262144). If compaction fires at 262k
+    // tokens for a model that only has 131k context, output gets truncated.
+    const loadedModel = {
+      limit: { context: 131_072, input: undefined, output: 8_192 },
+    } as unknown as import("@/provider/provider").Provider.Model
+
+    const maxModel = {
+      limit: { context: 262_144, input: undefined, output: 16_384 },
+    } as unknown as import("@/provider/provider").Provider.Model
+
+    // Tokens at the loaded model's boundary (just over usable threshold).
+    const tokens = {
+      input: 100_000,
+      output: 25_000,
+      cache: { read: 0, write: 0 },
+      reasoning: 0,
+      total: 125_000,
+    } as any
+
+    // With loaded context (131072): usable ≈ 131072 - min(20000, 8192) = 122880.
+    // Total tokens 125000 > 122880 → overflow fires. This is the CORRECT behavior
+    // for a model actually loaded with 131k context.
+    expect(isOverflow({ cfg: {} as any, tokens, model: loadedModel })).toBe(true)
+
+    // With max context (262144): usable ≈ 262144 - min(20000, 16384) = 245760.
+    // Total tokens 125000 < 245760 → no overflow. This would be WRONG if the model
+    // is actually loaded with only 131k context — it would keep going until the
+    // actual context limit is hit and output truncates.
+    expect(isOverflow({ cfg: {} as any, tokens, model: maxModel })).toBe(false)
+
+    // The regression guard: if a future change causes the probe result to be
+    // replaced with max_context_length downstream, loadedModel would behave like
+    // maxModel here and compaction wouldn't fire when it should.
+  })
+
+  test("test_probe_multiple_models_loaded_vs_not_loaded_priority", async () => {
+    // Real-world LM Studio response: mixed loaded/not-loaded models in one payload.
+    // Each model must use its own correct value, not a global fallback.
+    const { server, url } = await startMockLMStudio({
+      body: {
+        data: [
+          {
+            id: "loaded-model",
+            state: "loaded",
+            loaded_context_length: 65_536,
+            max_context_length: 131_072,
+          },
+          {
+            id: "unloaded-model",
+            state: "not-loaded",
+            max_context_length: 262_144,
+          },
+        ],
+      },
+    })
+    try {
+      const result = await probeLMStudio(`${url}/v1`)
+      expect(result.get("loaded-model")?.context).toBe(65_536) // loaded wins
+      expect(result.get("unloaded-model")?.context).toBe(262_144) // max is only option
+    } finally {
+      await closeServer(server)
+    }
+  })
+
+  test("test_applyProbe_config_nonzero_wins_over_probe_loaded", () => {
+    // When user has hardcoded limit.context in opencode.json, that must win.
+    // This is the config-wins merge behavior — not a regression vector but
+    // worth pinning alongside the loaded-context tests for completeness.
+    const result = applyProbeToModel(
+      { context: 32_000, output: 4_096 }, // user hardcoded these
+      { context: 131_072, output: 8_192 }, // probe says loaded is bigger
+    )
+    expect(result.context).toBe(32_000) // config wins
+    expect(result.output).toBe(4_096)
+  })
+})
+
+// ─── Existing regression test (isOverflow fires) ──────────────────────────
 
 describe("isOverflow regression", () => {
   test("test_isoverflow_fires_when_probed_context_is_populated", () => {
