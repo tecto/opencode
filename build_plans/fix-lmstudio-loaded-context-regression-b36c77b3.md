@@ -1,5 +1,5 @@
 # BP — Fix regression: LM Studio probe should use loaded_context_length (the actual context window of the m
-**UUID:** `b36c77b3`. **Type:** fix. **Lifecycle: CONVERGED**
+**UUID:** `b36c77b3`. **Type:** fix. **Lifecycle: EXECUTED**
 ## Header
 **Goal:** Verify that the LM Studio probe correctly uses loaded_context_length for compaction calculations and apply downstream fixes where the loaded context is being overridden by max_context_length.
 
